@@ -1,0 +1,162 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Outfit", sans-serif;
+
+  --color-prelume-bg: #0B0F14;
+  --color-prelume-card: rgba(20, 20, 25, 0.7);
+  --color-prelume-accent: #3b82f6;
+  --color-prelume-neon-blue: #00f2ff;
+  --color-prelume-neon-purple: #bc13fe;
+}
+
+@layer base {
+  body {
+    @apply bg-prelume-bg text-slate-200 antialiased selection:bg-prelume-neon-blue/30;
+    font-family: var(--font-sans);
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+  }
+}
+
+.glass-panel {
+  @apply bg-prelume-card backdrop-blur-xl border border-white/10 shadow-2xl;
+}
+
+.neon-glow-blue {
+  box-shadow: 0 0 20px rgba(0, 242, 255, 0.15);
+}
+
+.neon-glow-purple {
+  box-shadow: 0 0 20px rgba(188, 19, 254, 0.15);
+}
+
+.ambient-gradient {
+  background: linear-gradient(
+    270deg,
+    rgba(59, 130, 246, 0.15),
+    rgba(124, 58, 237, 0.12),
+    rgba(99, 102, 241, 0.15),
+    rgba(59, 130, 246, 0.15)
+  );
+  background-size: 400% 400%;
+  animation: gradientShift 12s ease infinite;
+}
+
+@keyframes gradientShift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.noise-overlay {
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  opacity: 0.04;
+  mix-blend-mode: overlay;
+}
+
+.radial-hero-glow {
+  background: radial-gradient(
+    ellipse at center,
+    rgba(0, 242, 255, 0.08) 0%,
+    rgba(188, 19, 254, 0.05) 40%,
+    transparent 70%
+  );
+}
+
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.03) 25%,
+    rgba(255, 255, 255, 0.08) 50%,
+    rgba(255, 255, 255, 0.03) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.pipeline-line {
+  position: absolute;
+  top: 50%;
+  height: 2px;
+  background: linear-gradient(90deg, var(--color-prelume-neon-blue), var(--color-prelume-neon-purple));
+  opacity: 0.3;
+}
+
+.pipeline-line::after {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: 0;
+  width: 40px;
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, transparent, var(--color-prelume-neon-blue), transparent);
+  animation: pipelinePulse 3s ease-in-out infinite;
+}
+
+@keyframes pipelinePulse {
+  0% { left: -40px; opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { left: calc(100% + 40px); opacity: 0; }
+}
+
+.scan-line-full {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--color-prelume-neon-blue), transparent);
+  box-shadow: 0 0 20px var(--color-prelume-neon-blue), 0 0 60px var(--color-prelume-neon-blue);
+  animation: scanFull 2.5s linear infinite;
+}
+
+@keyframes scanFull {
+  0% { top: -2%; opacity: 0; }
+  5% { opacity: 1; }
+  95% { opacity: 1; }
+  100% { top: 102%; opacity: 0; }
+}
+
+.grid-overlay {
+  background-image:
+    linear-gradient(rgba(0, 242, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 242, 255, 0.03) 1px, transparent 1px);
+  background-size: 60px 60px;
+}
+
+.signal-scan-line {
+  background: linear-gradient(to bottom, transparent, var(--color-prelume-neon-blue), transparent);
+  height: 2px;
+  width: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  animation: scan 3s linear infinite;
+}
+
+@keyframes scan {
+  0% { top: 0%; opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
+
+.waveform-bar {
+  @apply w-1 bg-prelume-neon-blue rounded-full;
+  animation: wave 1.2s ease-in-out infinite;
+}
+
+@keyframes wave {
+  0%, 100% { height: 10%; }
+  50% { height: 100%; }
+}
