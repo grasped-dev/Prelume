@@ -37,7 +37,7 @@ OUTPUT:
 plain text only (no formatting)`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash-preview",
+      model: "gemini-2.5-flash",
       contents: prompt,
     });
 

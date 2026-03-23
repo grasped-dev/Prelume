@@ -1,4 +1,4 @@
-import type { ScrapeResult, StepResult } from "./types";
+import type { ScrapeResult, StepResult, CompanySearchResult } from "./types";
 import type { SignalExtraction } from "./signalSchema";
 import { SIGNAL_SCHEMA } from "./signalSchema";
 
@@ -71,7 +71,7 @@ export async function scrapeJobPage(
 export async function searchCompanyContext(
   companyName: string,
   roleTitle: string
-): Promise<StepResult<string>> {
+): Promise<StepResult<CompanySearchResult>> {
   return timed("search", async () => {
     if (!companyName) {
       throw new Error("No company name provided for search");
@@ -83,7 +83,8 @@ export async function searchCompanyContext(
       `"${companyName}" ${roleTitle} team`,
     ];
 
-    const results: string[] = [];
+    const seen = new Set<string>();
+    const urls: string[] = [];
 
     for (const query of queries) {
       try {
@@ -93,7 +94,6 @@ export async function searchCompanyContext(
           body: JSON.stringify({
             query,
             limit: 3,
-            scrapeOptions: { formats: ["markdown"] },
           }),
         });
 
@@ -106,14 +106,10 @@ export async function searchCompanyContext(
         const docs = json.data || [];
 
         for (const doc of docs) {
-          const content = doc.markdown || doc.description || "";
-          const title = doc.metadata?.title || doc.title || "";
           const url = doc.metadata?.sourceURL || doc.url || "";
-
-          if (content) {
-            results.push(
-              `Source: ${title} (${url})\n${content.slice(0, 1500)}`
-            );
+          if (url && !seen.has(url)) {
+            seen.add(url);
+            urls.push(url);
           }
         }
       } catch (err) {
@@ -124,11 +120,13 @@ export async function searchCompanyContext(
       }
     }
 
-    if (results.length === 0) {
+    if (urls.length === 0) {
       throw new Error("No search results found");
     }
 
-    return results.join("\n\n---\n\n");
+    // Cap at 4 URLs to leave room for the job URL in extract
+    const finalUrls = urls.slice(0, 4);
+    return { urls: finalUrls, companyName, resultCount: urls.length };
   });
 }
 
@@ -165,7 +163,7 @@ function ensureSources(
     .slice(0, 10);
 }
 
-function normalizeExtraction(raw: Record<string, unknown>): SignalExtraction {
+export function normalizeExtraction(raw: Record<string, unknown>): SignalExtraction {
   return {
     role_title: typeof raw.role_title === "string" ? raw.role_title.trim() : "",
     company_name: typeof raw.company_name === "string" ? raw.company_name.trim() : "",
@@ -183,7 +181,7 @@ function normalizeExtraction(raw: Record<string, unknown>): SignalExtraction {
 
 // --- Extract ---
 
-const EXTRACTION_PROMPT_PREFIX = `You are a high-end career strategist analyzing a job posting and company context.
+export const EXTRACTION_PROMPT_PREFIX = `You are a high-end career strategist analyzing a job posting and company context.
 
 You are NOT summarizing. You are extracting the most important signals that determine whether a candidate gets hired.
 
@@ -236,39 +234,91 @@ STYLE:
 
 OUTPUT: VALID JSON ONLY`;
 
-export async function extractSignalPacket(
-  jobContent: string,
-  companyContext: string
-): Promise<StepResult<SignalExtraction>> {
+export async function extractSignalPacket(input: {
+  jobUrl?: string;
+  jobText?: string;
+  companyUrls?: string[];
+}): Promise<StepResult<SignalExtraction>> {
   return timed("extract", async () => {
-    const prompt = [
-      EXTRACTION_PROMPT_PREFIX,
-      "",
-      "## Job Posting",
-      jobContent,
-      "",
-      companyContext ? `## Company Context\n${companyContext}` : "",
-    ]
-      .filter(Boolean)
-      .join("\n");
+    // Prompt: instructions only. Content comes via URLs.
+    let prompt = EXTRACTION_PROMPT_PREFIX;
 
-    const res = await fetch(`${FIRECRAWL_BASE}/extract`, {
+    // Text-only fallback: embed truncated text in prompt
+    if (input.jobText && !input.jobUrl) {
+      const truncated = input.jobText.slice(0, 7000);
+      prompt += `\n\n## Job Posting (pasted text)\n${truncated}`;
+    }
+
+    // Build URLs array: job URL + company URLs, max 5 total
+    const urls: string[] = [];
+
+    if (input.jobUrl) {
+      urls.push(input.jobUrl);
+    }
+
+    if (input.companyUrls) {
+      const remaining = 5 - urls.length;
+      urls.push(...input.companyUrls.slice(0, remaining));
+    }
+
+    // Fallback for text-only with no company URLs
+    if (urls.length === 0) {
+      urls.push("https://placeholder.firecrawl.dev");
+    }
+
+    // Start the extract job
+    const startRes = await fetch(`${FIRECRAWL_BASE}/extract`, {
       method: "POST",
       headers: getHeaders(),
       body: JSON.stringify({
-        urls: ["https://placeholder.firecrawl.dev"],
+        urls,
         prompt,
         schema: SIGNAL_SCHEMA,
       }),
     });
 
-    if (!res.ok) {
-      const body = await res.text();
-      throw new Error(`Firecrawl extract failed (${res.status}): ${body}`);
+    if (!startRes.ok) {
+      const body = await startRes.text();
+      throw new Error(`Firecrawl extract failed (${startRes.status}): ${body}`);
     }
 
-    const json = await res.json();
-    const raw = json.data;
+    const startJson = await startRes.json();
+
+    // If data is returned directly (e.g. placeholder URL), use it
+    // Otherwise poll until the async job completes
+    let raw = startJson.data;
+
+    if ((!raw || typeof raw !== "object") && startJson.id) {
+      const jobId = startJson.id as string;
+      const maxAttempts = 30;
+
+      for (let i = 0; i < maxAttempts; i++) {
+        await new Promise((r) => setTimeout(r, 2000));
+
+        const pollRes = await fetch(`${FIRECRAWL_BASE}/extract/${jobId}`, {
+          method: "GET",
+          headers: getHeaders(),
+        });
+
+        if (!pollRes.ok) {
+          const body = await pollRes.text();
+          throw new Error(`Firecrawl extract poll failed (${pollRes.status}): ${body}`);
+        }
+
+        const pollJson = await pollRes.json();
+
+        if (pollJson.status === "completed") {
+          raw = pollJson.data;
+          break;
+        }
+
+        if (pollJson.status === "failed" || pollJson.status === "cancelled") {
+          throw new Error(`Firecrawl extract ${pollJson.status}: ${pollJson.error || "unknown"}`);
+        }
+
+        console.log(`[extract] Polling attempt ${i + 1}/${maxAttempts}, status: ${pollJson.status}`);
+      }
+    }
 
     if (!raw || typeof raw !== "object") {
       throw new Error("Extraction returned no data");

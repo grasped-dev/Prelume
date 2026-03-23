@@ -132,6 +132,30 @@
     linear-gradient(rgba(0, 242, 255, 0.03) 1px, transparent 1px),
     linear-gradient(90deg, rgba(0, 242, 255, 0.03) 1px, transparent 1px);
   background-size: 60px 60px;
+  mask-image: radial-gradient(circle at center, transparent 120px, black 260px);
+  -webkit-mask-image: radial-gradient(circle at center, transparent 120px, black 260px);
+}
+
+.export-header {
+  display: none;
+}
+
+.export-mode {
+  padding: 32px;
+  background: #0B0F14;
+  border-radius: 0;
+}
+
+.export-mode * {
+  animation: none !important;
+  transition: none !important;
+}
+
+.export-mode .export-header {
+  display: block;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .signal-scan-line {

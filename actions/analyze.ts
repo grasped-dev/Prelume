@@ -3,8 +3,8 @@
 import {
   scrapeJobPage,
   searchCompanyContext,
-  extractSignalPacket,
 } from "@/lib/firecrawl";
+import { extractFromText } from "@/lib/extractFromText";
 import type { SignalPacket, SignalExtraction } from "@/lib/types";
 import { generateBriefing } from "@/lib/generateBriefing";
 import { cleanSignalPacket } from "@/lib/cleanSignals";
@@ -84,27 +84,24 @@ export async function analyzeRole(input: {
   const start = Date.now();
   console.log("[analyze] Starting pipeline", { jobUrl, hasText: !!jobText });
 
-  // Step 1: Scrape job page (if URL provided)
+  // Step 1: Get job content
   let jobContent = jobText || "";
 
   if (jobUrl) {
     const scrapeResult = await scrapeJobPage(jobUrl);
-
     if (scrapeResult.data) {
       jobContent = scrapeResult.data.markdown;
-      console.log(
-        `[analyze] Scraped "${scrapeResult.data.title}" (${jobContent.length} chars)`
-      );
+      console.log(`[analyze] Scraped "${scrapeResult.data.title}" (${jobContent.length} chars)`);
     } else {
-      console.warn("[analyze] Scrape failed, using URL as context");
-      jobContent = `Job URL: ${jobUrl}\n\nPlease analyze this job posting URL and extract career intelligence signals.`;
+      console.warn("[analyze] Scrape failed, using URL as minimal context");
+      jobContent = `Job posting URL: ${jobUrl}`;
     }
   }
 
-  // Step 2: Initial extraction to identify company + role
-  const initialExtract = await extractSignalPacket(jobContent, "");
-  const companyName = initialExtract.data?.company_name || "";
-  const roleTitle = initialExtract.data?.role_title || "";
+  // Step 2: Extract signals via Gemini
+  const initialExtraction = await extractFromText(jobContent);
+  const companyName = initialExtraction.company_name || "";
+  const roleTitle = initialExtraction.role_title || "";
 
   console.log(`[analyze] Identified: "${roleTitle}" at "${companyName}"`);
 
@@ -113,23 +110,42 @@ export async function analyzeRole(input: {
 
   if (companyName) {
     const searchResult = await searchCompanyContext(companyName, roleTitle);
-    companyContext = searchResult.data || "";
+    if (searchResult.data) {
+      // Fetch markdown from top company URLs for context
+      const contextParts: string[] = [];
+      for (const url of searchResult.data.urls.slice(0, 3)) {
+        const result = await scrapeJobPage(url);
+        if (result.data) {
+          contextParts.push(result.data.markdown.slice(0, 2000));
+        }
+      }
+      companyContext = contextParts.join("\n\n---\n\n");
+    }
   } else {
     console.warn("[analyze] No company name — skipping search");
   }
 
   // Step 4: Full extraction with company context
-  const extractResult = await extractSignalPacket(jobContent, companyContext);
+  let finalExtraction = initialExtraction;
 
-  if (!extractResult.data) {
-    throw new Error(
-      `Failed to extract signal packet: ${extractResult.error || "unknown error"}`
-    );
+  if (companyContext) {
+    try {
+      finalExtraction = await extractFromText(jobContent, companyContext);
+      console.log("[analyze] Full extraction with company context succeeded");
+    } catch {
+      console.warn("[analyze] Full extraction failed, using initial result");
+    }
   }
+
+  if (!finalExtraction.role_title) {
+    throw new Error("Failed to extract signal packet: no role_title found");
+  }
+
+  const extractionData = finalExtraction;
 
   // Step 5: Transform to UI-compatible SignalPacket
   const signalPacket = cleanSignalPacket(
-    transformToSignalPacket(extractResult.data)
+    transformToSignalPacket(extractionData)
   );
 
   // Step 6: Generate strategic briefing via Gemini
@@ -141,7 +157,7 @@ export async function analyzeRole(input: {
 
   return {
     signalPacket,
-    sources: extractResult.data.sources,
+    sources: extractionData.sources,
     generatedAt: new Date().toISOString(),
   };
 }

@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import Image from "next/image";
+import { generateReport } from "@/lib/generateReport";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Search,
@@ -10,16 +12,18 @@ import {
   Target,
   ArrowRight,
   ArrowDown,
-  Cpu,
   Globe,
   Briefcase,
   ChevronRight,
   Network,
   Volume2,
+  Download,
+  Share2,
 } from "lucide-react";
 import type { SignalPacket } from "@/lib/types";
 import { analyzeRole } from "@/actions/analyze";
-import AgentBriefing from "@/app/components/AgentBriefing";
+import CareerAdvisor from "@/app/components/CareerAdvisor";
+
 
 // --- Components ---
 
@@ -206,12 +210,32 @@ export default function Page() {
   const [showCards, setShowCards] = useState(false);
   const [sources, setSources] = useState<{ title: string; url: string }[]>([]);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const packetRef = useRef<HTMLDivElement>(null);
 
   const scanMessages = [
     "Decoding market signals...",
     "Analyzing company intelligence...",
     "Mapping candidate positioning...",
   ];
+
+  const handleShare = async () => {
+    if (!packet) return;
+    try {
+      const res = await fetch("/api/share", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ signalPacket: packet, sources, generatedAt }),
+      });
+      const { id } = await res.json();
+      const url = `${window.location.origin}/signal/${id}`;
+      await navigator.clipboard.writeText(url);
+      setShareUrl(url);
+      setTimeout(() => setShareUrl(null), 3000);
+    } catch (error) {
+      console.error("Share failed:", error);
+    }
+  };
 
   const handleGenerate = async () => {
     if (!jobUrl) return;
@@ -280,6 +304,50 @@ export default function Page() {
       <div className="fixed inset-0 z-4 radial-hero-glow pointer-events-none" />
 
       <TopBar status={isGenerating ? "loading" : packet ? "complete" : "idle"} />
+
+      {/* Analyzing overlay — rendered outside main to avoid z-10 stacking context */}
+      <AnimatePresence>
+        {isGenerating && (
+          <motion.div
+            key="loading-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 top-16 z-20 flex flex-col items-center justify-center bg-prelume-bg"
+          >
+            <div className="absolute inset-0 overflow-hidden pointer-events-none">
+              <div className="scan-line-full" />
+            </div>
+
+            <div className="absolute inset-0 grid-overlay pointer-events-none" />
+
+            <div className="relative z-10 flex flex-col items-center">
+              <motion.div
+                animate={{ scale: [0.95, 1, 0.95] }}
+                transition={{ repeat: Infinity, duration: 2.5, ease: "easeInOut" }}
+                className="rounded-full bg-black/30 backdrop-blur-sm p-6 mb-8 drop-shadow-[0_0_25px_rgba(0,242,255,0.3)]"
+              >
+                <Image src="/logo.png" alt="Prelume" width={64} height={64} className="opacity-90" />
+              </motion.div>
+              <AnimatePresence mode="wait">
+                <motion.p
+                  key={scanPhase}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  transition={{ duration: 0.4 }}
+                  className="text-xl font-display font-bold text-white mb-3"
+                >
+                  {scanMessages[scanPhase]}
+                </motion.p>
+              </AnimatePresence>
+              <p className="text-slate-500 font-mono text-xs tracking-widest uppercase">
+                Signal Intelligence Engine
+              </p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <main className="relative z-10 pt-32 pb-20 px-6 max-w-7xl mx-auto">
         <AnimatePresence mode="wait">
@@ -376,40 +444,7 @@ export default function Page() {
                 </motion.span>
               </button>
             </motion.section>
-          ) : isGenerating ? (
-            <motion.section
-              key="loading"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-20 flex flex-col items-center justify-center"
-            >
-              <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                <div className="scan-line-full" />
-              </div>
-
-              <div className="absolute inset-0 grid-overlay pointer-events-none" />
-
-              <div className="relative z-10 flex flex-col items-center">
-                <Cpu className="w-16 h-16 text-prelume-neon-blue animate-pulse mb-8" />
-                <AnimatePresence mode="wait">
-                  <motion.p
-                    key={scanPhase}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    transition={{ duration: 0.4 }}
-                    className="text-xl font-display font-bold text-white mb-3"
-                  >
-                    {scanMessages[scanPhase]}
-                  </motion.p>
-                </AnimatePresence>
-                <p className="text-slate-500 font-mono text-xs tracking-widest uppercase">
-                  Signal Intelligence Engine
-                </p>
-              </div>
-            </motion.section>
-          ) : (
+          ) : packet ? (
             <motion.section
               key="packet"
               initial={{ opacity: 0, scale: 0.97 }}
@@ -417,6 +452,18 @@ export default function Page() {
               transition={{ duration: 0.5, ease: "easeOut" }}
               className="space-y-8"
             >
+              <div ref={packetRef} className="space-y-8">
+              {/* PDF Export Header — hidden in UI, visible during export */}
+              <div className="export-header">
+                <div className="flex items-center gap-3 mb-2">
+                  <img src="/logo.png" alt="Prelume" className="w-8 h-8" />
+                  <span className="text-xl font-display font-bold tracking-tighter text-white">PRELUME</span>
+                </div>
+                <h2 className="text-2xl font-display font-bold text-white">Signal Packet</h2>
+                <p className="text-lg text-slate-400">{packet?.roleName} at {packet?.companyName}</p>
+                <p className="text-xs text-slate-500 mt-1">{generatedAt ? new Date(generatedAt).toLocaleString() : ""}</p>
+              </div>
+
               {/* Header Panel */}
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
@@ -455,17 +502,49 @@ export default function Page() {
                         {packet?.companyName}
                       </p>
                     </div>
-                    <div className="flex flex-col items-center gap-1">
-                      <ConfidenceMeter
-                        score={packet?.confidenceScore ?? 0}
-                      />
-                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                        Confidence
-                      </span>
+                    <div className="flex items-start gap-4">
+                      <button
+                        onClick={() => packet && generateReport(packet)}
+                        className="px-3 py-1.5 rounded-full text-xs font-medium bg-white/5 border border-white/10 text-white/70 hover:bg-white/10 hover:border-white/30 hover:text-white transition-all flex items-center gap-1.5"
+                      >
+                        <Download className="w-3 h-3" />
+                        Download PDF
+                      </button>
+                      <button
+                        onClick={handleShare}
+                        className="px-3 py-1.5 rounded-full text-xs font-medium bg-white/5 border border-white/10 text-white/70 hover:bg-white/10 hover:border-white/30 hover:text-white transition-all flex items-center gap-1.5"
+                      >
+                        <Share2 className="w-3 h-3" />
+                        {shareUrl ? "Copied!" : "Share"}
+                      </button>
+                      <div className="flex flex-col items-center gap-1">
+                        <ConfidenceMeter
+                          score={packet?.confidenceScore ?? 0}
+                        />
+                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                          Confidence
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
               </motion.div>
+
+              {/* Quick Navigation */}
+              <div className="flex gap-3 justify-center">
+                <button
+                  onClick={() => document.getElementById("signals-section")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                  className="px-4 py-2 rounded-full text-sm font-medium bg-white/5 border border-white/10 text-white/70 hover:bg-white/10 hover:scale-[1.02] transition-all"
+                >
+                  View Signals
+                </button>
+                <button
+                  onClick={() => document.getElementById("advisor-section")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                  className="px-4 py-2 rounded-full text-sm font-medium bg-linear-to-r from-prelume-neon-blue/10 to-prelume-neon-purple/10 border border-prelume-neon-blue/20 text-white/80 hover:from-prelume-neon-blue/20 hover:to-prelume-neon-purple/20 hover:scale-[1.02] transition-all"
+                >
+                  Open Career Advisor
+                </button>
+              </div>
 
               {/* Your Edge */}
               {packet?.marketSignal.positioning && (
@@ -487,7 +566,7 @@ export default function Page() {
               )}
 
               {/* Signal Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div id="signals-section" className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {!showCards ? (
                   <>
                     <ShimmerCard />
@@ -733,23 +812,7 @@ export default function Page() {
                 </motion.div>
               )}
 
-              {/* AI Briefing Agent */}
-              {packet && (
-                <AgentBriefing
-                  packet={packet}
-                  sources={sources}
-                  onRefreshPacket={async (jobInput) => {
-                    const result = await analyzeRole(
-                      jobInput.startsWith("http")
-                        ? { jobUrl: jobInput }
-                        : { jobText: jobInput }
-                    );
-                    setPacket(result.signalPacket);
-                    setSources(result.sources);
-                    return result.signalPacket;
-                  }}
-                />
-              )}
+              </div>
 
               {/* Strategy Panel */}
               <div className="glass-panel p-8 rounded-3xl">
@@ -808,8 +871,15 @@ export default function Page() {
                 </button>
               </div>
             </motion.section>
-          )}
+          ) : null}
         </AnimatePresence>
+
+        {/* AI Career Advisor — outside AnimatePresence to persist session */}
+        {packet && (
+          <div id="advisor-section">
+            <CareerAdvisor agentId={process.env.NEXT_PUBLIC_ELEVENLABS_AGENT_ID || ""} />
+          </div>
+        )}
 
         {!packet && !isGenerating && (
           <section id="how-it-works" className="pt-32 pb-20 max-w-5xl mx-auto">

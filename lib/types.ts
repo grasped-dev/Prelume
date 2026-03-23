@@ -35,3 +35,9 @@ export interface StepResult<T> {
   durationMs: number;
   error?: string;
 }
+
+export interface CompanySearchResult {
+  urls: string[];
+  companyName: string;
+  resultCount: number;
+}
