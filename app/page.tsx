@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import type { SignalPacket } from "@/lib/types";
 import { analyzeRole } from "@/actions/analyze";
-import CareerAdvisor from "@/app/components/CareerAdvisor";
+import CareerAdvisor, { type CareerAdvisorHandle } from "@/app/components/CareerAdvisor";
 
 
 // --- Components ---
@@ -212,6 +212,7 @@ export default function Page() {
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const packetRef = useRef<HTMLDivElement>(null);
+  const advisorRef = useRef<CareerAdvisorHandle>(null);
 
   const scanMessages = [
     "Decoding market signals...",
@@ -539,7 +540,10 @@ export default function Page() {
                   View Signals
                 </button>
                 <button
-                  onClick={() => document.getElementById("advisor-section")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                  onClick={() => {
+                    document.getElementById("advisor-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                    advisorRef.current?.startAdvisor();
+                  }}
                   className="px-4 py-2 rounded-full text-sm font-medium bg-linear-to-r from-prelume-neon-blue/10 to-prelume-neon-purple/10 border border-prelume-neon-blue/20 text-white/80 hover:from-prelume-neon-blue/20 hover:to-prelume-neon-purple/20 hover:scale-[1.02] transition-all"
                 >
                   Open Career Advisor
@@ -877,7 +881,7 @@ export default function Page() {
         {/* AI Career Advisor — outside AnimatePresence to persist session */}
         {packet && (
           <div id="advisor-section">
-            <CareerAdvisor agentId={process.env.NEXT_PUBLIC_ELEVENLABS_AGENT_ID || ""} />
+            <CareerAdvisor ref={advisorRef} agentId={process.env.NEXT_PUBLIC_ELEVENLABS_AGENT_ID || ""} />
           </div>
         )}
 
