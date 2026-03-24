@@ -1,0 +1,14 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      [
+        'build',
+        '-t',
+        'us-central1-docker.pkg.dev/prelume/prelume-repo/prelume',
+        '--build-arg',
+        'NEXT_PUBLIC_ELEVENLABS_AGENT_ID=agent_2301km7g8b1zecjsdkp85csjzke6',
+        '.'
+      ]
+
+images:
+  - 'us-central1-docker.pkg.dev/prelume/prelume-repo/prelume'

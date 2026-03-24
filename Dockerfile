@@ -1,11 +1,12 @@
 # -------- Base --------
-FROM node:18-alpine AS base
+FROM node:20-alpine AS base
+RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 # -------- Dependencies --------
 FROM base AS deps
 COPY package.json package-lock.json* ./
-RUN npm ci
+RUN npm ci --include=optional
 
 # -------- Builder --------
 FROM base AS builder
