@@ -5,6 +5,17 @@ export const metadata: Metadata = {
   title: "Prelume",
   description: "Career intelligence signal briefing",
   icons: { icon: "/favicon.ico" },
+  openGraph: {
+    title: "Prelume",
+    description: "Career intelligence signal briefing",
+    images: [{ url: "/og-image.png", width: 1200, height: 630 }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Prelume",
+    description: "Career intelligence signal briefing",
+    images: ["/og-image.png"],
+  },
 };
 
 export default function RootLayout({
